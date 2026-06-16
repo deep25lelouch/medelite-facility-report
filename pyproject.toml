@@ -1,0 +1,31 @@
+[tool.poetry]
+name = "medelite-facility-report"
+version = "0.1.0"
+description = "Facility Assessment Report Generator - CMS Provider Data + manual operational inputs."
+authors = ["Deep Prajapati <prajapati.dee@northeastern.edu>"]
+readme = "README.md"
+# package-mode = false => Poetry manages dependencies only and does NOT try to install a root
+# package. This is what lets Streamlit Community Cloud run `poetry install` cleanly on a repo
+# that is an app (not a library), avoiding the "does not contain any element" install error.
+package-mode = false
+
+[tool.poetry.dependencies]
+python = "^3.11"
+streamlit = "^1.40"
+requests = "^2.32"
+pydantic = "^2.9"
+pandas = "^2.2"
+reportlab = "^4.2"
+python-docx = "^1.1"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3"
+hypothesis = "^6.112"
+ruff = "^0.6"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
