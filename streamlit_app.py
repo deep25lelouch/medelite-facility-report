@@ -7,6 +7,7 @@ import streamlit as st
 
 from medelite import config, presentation
 from medelite.cms_client import CMSClientError, get_provider
+from medelite.export.pdf import build_pdf
 from medelite.models import ManualInputs
 from medelite.report import assemble_report
 
@@ -120,7 +121,19 @@ def main() -> None:
 
     st.markdown(f"#### {html.escape(rep.facility_name)}")
     render_report_table(presentation.mvp_rows(rep))
-    st.link_button("View on Medicare Care Compare \u2197", rep.medicare_url)
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.download_button(
+            "Download PDF",
+            data=build_pdf(rep),
+            file_name=f"{rep.ccn or 'facility'}_assessment_snapshot.pdf",
+            mime="application/pdf",
+            use_container_width=True,
+        )
+    with col2:
+        st.link_button("View on Medicare Care Compare \u2197", rep.medicare_url, use_container_width=True)
+
     render_qa(rep)
 
 
