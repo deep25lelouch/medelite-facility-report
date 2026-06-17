@@ -2,7 +2,7 @@
 
 # 🏥 Facility Assessment Report Generator
 
-**Turn a CMS Certification Number into a branded, export-ready facility snapshot — in seconds.**
+**Turn a CMS Certification Number into a branded, export-ready facility snapshot in seconds.**
 
 A lightweight micro-app that pulls live CMS nursing-home data for any facility, merges it with manual operational fields, and renders a polished **Facility Assessment Snapshot** with one-click **PDF** and **Word** export, plus a side-by-side **compare mode** for evaluating several facilities at once.
 
