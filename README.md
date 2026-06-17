@@ -1,96 +1,217 @@
-# Medelite — Facility Assessment Report Generator
+<div align="center">
 
-A lightweight Streamlit app that looks up a skilled nursing facility by its **CMS Certification
-Number (CCN)**, pulls public performance data from the CMS Provider Data Catalog, combines it with
-the manual operational inputs Medelite tracks internally, and exports a polished, print-ready
-**Facility Assessment Snapshot** (PDF / DOCX) with a live link back to the Medicare Care Compare
-profile.
+# 🏥 Facility Assessment Report Generator
 
-> Take-home case study for the Medelite *Healthcare Data Automation & QA Analytics* Internship.
+**Turn a CMS Certification Number into a branded, export-ready facility snapshot — in seconds.**
+
+A lightweight micro-app that pulls live CMS nursing-home data for any facility, merges it with manual operational fields, and renders a polished **Facility Assessment Snapshot** with one-click **PDF** and **Word** export.
+
+![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
+![Streamlit](https://img.shields.io/badge/Streamlit-FF4B4B?logo=streamlit&logoColor=white)
+![Pydantic](https://img.shields.io/badge/Pydantic-v2-E92063?logo=pydantic&logoColor=white)
+![Plotly](https://img.shields.io/badge/Plotly-3F4F75?logo=plotly&logoColor=white)
+![Poetry](https://img.shields.io/badge/Poetry-60A5FA?logo=poetry&logoColor=white)
+![Tested](https://img.shields.io/badge/tested-pytest%20%2B%20Hypothesis-2ea44f?logo=pytest&logoColor=white)
+
+</div>
+
+<!-- Add a screenshot: save a capture of the running app to docs/screenshot.png and uncomment the block below.
+<p align="center"><img src="docs/screenshot.png" width="760" alt="Facility Assessment Snapshot"></p>
+-->
+
+---
+
+## Overview
+
+Care organizations evaluating a nursing facility need a fast, trustworthy one-page profile that blends **public CMS quality data** with their own **operational notes**. This app does exactly that: enter a 6-digit **CMS Certification Number (CCN)**, and it fetches the facility's official ratings, bed count, location, and hospitalization/ED measures directly from the CMS Provider Data Catalog, layers in manually entered fields (EMR, census, coverage, etc.), and produces a branded snapshot you can read on screen or download as a PDF or Word document.
+
+The design priority is **data quality**: every value from CMS is validated and coerced through a QA layer that decodes official footnotes, flags schema drift, and clearly marks anything missing as `N/A` with the reason — never a silent blank or a wrong number.
+
+---
+
+## Features
+
+**Core**
+- 🔎 **Live CMS lookup** by CCN against the public Provider Data API (no API key required).
+- 📝 **Manual field merge** — EMR, current census, patient type, prior coverage/performance, medical coverage, and a facility-name override.
+- 🧾 **25-row Facility Assessment Snapshot** with the hardcoded `INFINITE · Managed by MEDELITE` brand header.
+- 🛡️ **QA layer** — validated coercion, footnote-aware `N/A`, out-of-range rejection, and a schema-drift guard that fails loud if CMS renames a column.
+- 📄 **PDF export** with a clickable Medicare Care Compare link.
+
+**Bonus**
+- 📊 **12 hospitalization & ED metrics** — short-stay rehospitalization/ED and long-stay hospitalization/ED, each compared against **national and state** benchmarks (pulled from two additional CMS datasets).
+- 📈 **Interactive Plotly charts** + delta data-cards (facility vs U.S. average, color-coded so *lower = better*).
+- 📃 **Word (.docx) export** mirroring the snapshot, with a real clickable hyperlink.
+- ⭐ **Star-rating glyphs** and a sectioned table separating the profile block from the metrics block.
+- ✅ **CCN format validation** and friendly error states for not-found / API-down cases.
+- 🧪 **~37 tests** including **Hypothesis** property-based tests that caught a real edge-case bug.
+
+---
 
 ## Architecture
 
-UI (Streamlit) → core service layer (framework-agnostic Python) → CMS Provider Data Catalog API.
-The fetch runs **server-side**, so there is no CORS to fight. There is **no database** — a lookup
-reads CMS live and the report is assembled in-session.
+A deliberately thin Streamlit UI sits on top of a **framework-agnostic core** (`medelite/`) that contains **zero Streamlit imports** — so the same logic is unit-testable and could be lifted behind a REST API unchanged. A single declarative field registry (`mapping.py`) is the source of truth for the layout, and one `ReportModel` feeds **three renderers** (on-screen table, PDF, Word).
 
-```
-streamlit_app.py                 UI layer only (entry point)
-  └─ medelite/                   core service layer — no streamlit imports (testable, API-ready)
-       config.py                 dataset IDs, API base, branding constants, Medicare URL template
-       mapping.py                field-mapping registry — single source of truth
-       models.py                 Pydantic: ReportModel, ManualInputs, StarRatings, Metrics, QAReport
-       cms_client.py             PDC datastore client (+retry, +cache)
-       normalize.py              raw payload -> typed values (coerce, footnotes, prefix-resolve)
-       qa.py                     validated coercion + QA report (ranges, missing, schema drift)
-       report.py                 assembles ReportModel from CMS + manual + name-override logic
-       presentation.py           registry-driven (label, value) rows shared by UI + exporters
-       export/  pdf.py docx.py   one ReportModel, many renderers                           [later]
-  └─ CMS PDC API                 data.cms.gov/provider-data  ·  no key  ·  no rate limit
+```mermaid
+flowchart TD
+    U(["User"]) -->|"CCN + manual fields"| UI["streamlit_app.py (thin UI layer)"]
+    UI --> V["validation.py: validate CCN"]
+
+    subgraph CORE["medelite/ core (framework-agnostic, no Streamlit)"]
+        direction TB
+        C["cms_client.py: cached HTTP + retries"] --> N["normalize.py: prefix-resolve, build metrics"]
+        N --> Q["qa.py: coercion, footnotes, schema guard"]
+        Q --> R["report.py: assemble ReportModel"]
+        R --> P["presentation.py: format rows + values"]
+        MAP["mapping.py: declarative 25-row registry"] -.->|"drives"| R
+        MOD["models.py: Pydantic models"] -.->|"types"| R
+    end
+
+    UI --> C
+    C <-->|"JSON, no API key"| API[("CMS Provider Data API: 3 datasets")]
+    P --> UI
+    P --> PDF["export/pdf.py: reportlab"]
+    P --> DOCX["export/docx.py: python-docx"]
+    PDF --> UI
+    DOCX --> UI
 ```
 
-## Data sources (CMS Provider Data Catalog)
+### Request lifecycle
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant UI as Streamlit UI
+    participant Core as medelite core
+    participant CMS as CMS API
+
+    User->>UI: Enter CCN + manual fields
+    UI->>UI: validate_ccn()
+    UI->>Core: fetch provider / claims / state averages
+    Core->>CMS: GET datastore/query (3 datasets)
+    CMS-->>Core: JSON rows
+    Core->>Core: normalize + QA (coerce, footnotes, schema check)
+    Core->>Core: assemble ReportModel (name override applied)
+    Core-->>UI: ReportModel + QAReport
+    UI->>User: Snapshot table, star ratings, Plotly charts
+    UI->>User: PDF / Word download + Care Compare link
+```
+
+---
+
+## Data sources
+
+All data comes from the public **CMS Provider Data Catalog** (`data.cms.gov`) — no API key, no rate limits. Fetches happen **server-side**, so there are no browser CORS issues.
 
 | Dataset | ID | Used for |
 | --- | --- | --- |
-| Provider Information | `4pq5-n9py` | name, location, certified beds, star ratings (MVP) |
-| Medicare Claims Quality Measures | `ijh5-nb2v` | 4 facility hospitalization / ED values (bonus) |
-| State US Averages | `xcdc-v8bm` | 8 national + state averages (bonus) |
+| Provider Information | `4pq5-n9py` | Star ratings, certified beds, address, legal name |
+| Medicare Claims Quality Measures | `ijh5-nb2v` | Facility hospitalization & ED rates |
+| Provider Data — State / US Averages | `xcdc-v8bm` | National and per-state benchmark values |
 
-Query pattern (no API key required):
-`GET {base}/{datasetId}/0?conditions[0][property]=cms_certification_number_ccn&conditions[0][value]={ccn}&conditions[0][operator]==`
+Query pattern (single facility):
 
-## Facility name override
-
-"Name of Facility" defaults to the CMS legal name (`provider_name`); if the user types a custom
-name it overrides the API value. The `INFINITE` platform banner is a hardcoded constant and is
-**never** replaced by the facility name (per the brief's branding guardrail).
-
-## QA strategy
-
-Raw CMS payloads pass through one mapping registry: string→numeric coercion, range validation
-(ratings 1–5), footnote-aware "N/A", and schema-drift detection. The PDC API truncates long column
-names and appends a hash (e.g. `..._on_t_4a14`), so columns are resolved by stable prefix and
-required field slugs are asserted, not assumed. Each lookup produces a structured QA report, and
-the CMS→report mapping is exercised end-to-end by unit + Hypothesis property tests.
-
-## Assumptions
-
-- The test CCN `686123` resolves to a live CMS record — **Kendall Lakes Healthcare and Rehab
-  Center** (Miami, FL), confirmed via `scripts/verify.py`.
-- The app renders **current** CMS data. The sample snapshot's specific values (overall rating 1,
-  120 beds) differ from the current live values (overall 5, 150 beds) because CMS refreshes ratings
-  monthly — the sample is a **layout reference from an earlier refresh**, not a fixed data target.
-  The app intentionally shows live data rather than reproducing the static sample; the match is on
-  format, not numbers.
-- A not-found CCN is handled gracefully (empty result → report built from manual inputs + the name
-  override + the dynamic Medicare link).
-- For the bonus hospitalization/ED metrics, facility values use the risk-adjusted score from the
-  Claims dataset and national/state averages come from the `NATION` and state rows of State US
-  Averages.
-
-## Scale path (intentionally not built)
-
-For a single on-demand lookup, an ingestion pipeline is overkill. If Medelite needed to evaluate
-many facilities, pre-cache, or track trends across monthly CMS refreshes, the next step would be a
-monthly Airflow DAG (triggered on the PDC refresh) landing into Postgres/Snowflake and served from
-the warehouse. This MVP is the live-read slice of that design.
-
-## Setup
-
-```bash
-poetry install
-poetry run python scripts/verify.py        # Phase 0: confirm test CCN + lock field slugs
-poetry run streamlit run streamlit_app.py  # run the app
-poetry run pytest                          # run the test suite
+```
+GET https://data.cms.gov/provider-data/api/1/datastore/query/{datasetId}/0
+    ?conditions[0][property]=cms_certification_number_ccn
+    &conditions[0][value]={ccn}
+    &conditions[0][operator]==
 ```
 
-## Deploy
+CMS truncates and hash-suffixes long column names, so the core resolves fields by **stable prefix** rather than hardcoding the volatile suffix.
 
-Streamlit Community Cloud — point it at `streamlit_app.py`; dependencies are read from
-`pyproject.toml` (`package-mode = false`). Free-tier apps sleep after inactivity, so open the URL
-once to warm it before a demo.
+---
+
+## Project structure
+
+```
+medelite-facility-report/
+├─ streamlit_app.py            # UI entry point (only file importing Streamlit)
+├─ medelite/                   # framework-agnostic core (no Streamlit imports)
+│  ├─ config.py                # API base, dataset IDs, brand constants
+│  ├─ mapping.py               # declarative 25-row field + metric registry
+│  ├─ models.py                # Pydantic models (ReportModel, QAReport, ...)
+│  ├─ cms_client.py            # cached CMS HTTP client + retries
+│  ├─ normalize.py             # slug prefix-resolution, metric assembly
+│  ├─ qa.py                    # validated coercion, footnotes, schema guard
+│  ├─ report.py                # assemble_report() / build_report()
+│  ├─ presentation.py          # row + value formatting (shared by all renderers)
+│  ├─ validation.py            # CCN input validation
+│  └─ export/
+│     ├─ pdf.py                # reportlab PDF renderer
+│     └─ docx.py               # python-docx Word renderer
+├─ tests/                      # ~37 tests (pytest + Hypothesis)
+├─ scripts/verify.py           # live CMS dataset/slug verifier
+├─ .streamlit/config.toml      # theme (magenta primary)
+├─ pyproject.toml              # Poetry config + dependencies
+├─ poetry.lock
+└─ README.md
+```
+
+---
+
+## Getting started
+
+**Requirements:** Python 3.11+ and [Poetry](https://python-poetry.org/).
+
+```bash
+git clone https://github.com/<your-username>/medelite-facility-report.git
+cd medelite-facility-report
+poetry install
+poetry run streamlit run streamlit_app.py
+```
+
+Open the local URL Streamlit prints, then enter a CCN in the sidebar — try **`686123`** (Kendall Lakes Healthcare and Rehab Center, Miami FL).
+
+> Need more facilities to test? `scripts/verify.py` (and the `find_test_ccns.py` helper) list real CCNs straight from the CMS dataset, filterable by state and rating.
+
+---
+
+## Testing
+
+```bash
+poetry run pytest -q       # ~37 tests, including property-based tests
+poetry run ruff check .    # lint
+```
+
+The suite covers value coercion and footnote handling, slug prefix-resolution, metric mapping, the not-found path, and the PDF/Word byte output. **Hypothesis** property tests fuzz the coercion layer — one of them surfaced an `OverflowError` from `int(float("inf"))`, now fixed with a finite-value guard and locked by a regression test.
+
+---
+
+## Deployment (Streamlit Community Cloud)
+
+1. Push the repo to **public** GitHub.
+2. On [share.streamlit.io](https://share.streamlit.io) → **New app** → select the repo, branch, and `streamlit_app.py`.
+3. Dependencies install automatically from `pyproject.toml` / `poetry.lock`. The project sets `package-mode = false`, so Poetry skips trying to install the repo itself as a package.
+
+> ⏰ The free tier **sleeps** after inactivity. Open the live URL a minute before any demo so it's warm.
+
+**Scale path (if Medelite evaluated many facilities at once):** schedule a monthly **Airflow** job to snapshot the CMS datasets into **Postgres/Snowflake**, and point the app at the warehouse instead of the live API — caching benchmarks and enabling cross-facility comparison. Intentionally *not* built here, since the brief is a single-facility report generator and added infrastructure would over-scope it.
+
+---
+
+## Design decisions & tradeoffs
+
+**Lightweight by intent.** Streamlit + a small typed core, no database, no API gateway. The brief is a 4–6 hour report micro-app, so the value is in clean data handling and a faithful layout — not infrastructure. Server-side fetching sidesteps CORS, and `pandas`/`pydantic` give a strong validation story.
+
+**Override logic.** Facility name resolves as **override → CMS legal name → "Unknown Facility"**. Manual operational fields are merged on top of CMS-derived values. The `INFINITE` brand banner is a **fixed constant**, never derived from the facility name.
+
+**QA / data-sourcing strategy.** Three CMS datasets, fetched server-side and cached. Every value passes through validated coercion that: decodes official **footnote codes** (e.g. "not enough data") into a readable `N/A` reason, rejects out-of-range or non-finite values, and runs a **schema-drift check** so a renamed CMS column fails loudly instead of silently nulling. Claims measures use `adjusted_score` with an `observed_score` fallback.
+
+**Assumptions.** CMS refreshes monthly, so **live data legitimately differs from the static sample PDF** — the sample is treated as a *layout* reference, not a data target. Short-stay measures are stored as percentages (e.g. `25.6`), long-stay measures as rates per 1,000 resident-days. Star glyphs render on screen; the PDF/Word exports keep numeric ratings for print-font safety.
+
+> These four themes map directly to the case-study questionnaire (Tech Stack & Override Logic · Data Sourcing & QA · Obstacles & Tradeoffs · Assumptions).
+
+---
 
 ## Tech stack
 
-Python · Streamlit · Pydantic · pandas · requests · reportlab · python-docx · PyTest · Hypothesis · Poetry
+`Python 3.11` · `Streamlit` · `Pydantic v2` · `requests` · `pandas` · `Plotly` · `reportlab` (PDF) · `python-docx` (Word) · `pytest` + `Hypothesis` · `ruff` · `Poetry`
+
+---
+
+<div align="center">
+
+Built by **Deep Prajapati** for the Medelite *Healthcare Data Automation & QA Analytics* technical case study.
+
+</div>
