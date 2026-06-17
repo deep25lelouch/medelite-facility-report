@@ -12,7 +12,7 @@ A lightweight micro-app that pulls live CMS nursing-home data for any facility, 
 ![Plotly](https://img.shields.io/badge/Plotly-3F4F75?logo=plotly&logoColor=white)
 ![Poetry](https://img.shields.io/badge/Poetry-60A5FA?logo=poetry&logoColor=white)
 ![Tested](https://img.shields.io/badge/tested-pytest%20%2B%20Hypothesis-2ea44f?logo=pytest&logoColor=white)
-[![CI](https://github.com/deep25lelouch/medelite-facility-report/actions/workflows/ci.yml/badge.svg)](https://github.com/<your-username>/medelite-facility-report/actions/workflows/ci.yml)
+[![CI](https://github.com/<deep25lelouch>/medelite-facility-report/actions/workflows/ci.yml/badge.svg)](https://github.com/<your-username>/medelite-facility-report/actions/workflows/ci.yml)
 
 </div>
 
@@ -44,7 +44,7 @@ The app runs in **two modes**: a detailed single-facility snapshot, and a **comp
 **Bonus**
 - 📊 **12 hospitalization & ED metrics** — short-stay rehospitalization/ED and long-stay hospitalization/ED, each compared against **national and state** benchmarks (pulled from two additional CMS datasets).
 - 📈 **Interactive Plotly charts** + delta data-cards (facility vs U.S. average, color-coded so *lower = better*).
-- 🆚 **Compare mode** — paste multiple CCNs and see facilities side by side (ratings, beds, hospitalization/ED) in a comparison table plus an overall-rating chart.
+- 🆚 **Compare mode** — paste multiple CCNs to evaluate facilities side by side: a comparison table, grouped **star-rating** and **hospitalization/ED outcome** charts (each vs the U.S. average), per-facility Care Compare links, and **CSV / PDF** export of the comparison.
 - 📃 **Word (.docx) export** mirroring the snapshot, with a real clickable hyperlink.
 - ⭐ **Star-rating glyphs** and a sectioned table separating the profile block from the metrics block.
 - ✅ **CCN format validation** and friendly error states for not-found / API-down cases.
@@ -142,7 +142,8 @@ medelite-facility-report/
 │  ├─ presentation.py          # row + value formatting (shared by all renderers)
 │  ├─ validation.py            # CCN validation + multi-CCN parsing
 │  └─ export/
-│     ├─ pdf.py                # reportlab PDF renderer
+│     ├─ pdf.py                # reportlab PDF renderer (single facility)
+│     ├─ compare_pdf.py        # reportlab PDF renderer (side-by-side comparison)
 │     └─ docx.py               # python-docx Word renderer
 ├─ tests/                      # ~39 tests (pytest + Hypothesis)
 ├─ scripts/verify.py           # live CMS dataset/slug verifier
@@ -166,7 +167,7 @@ poetry install
 poetry run streamlit run streamlit_app.py
 ```
 
-Open the local URL Streamlit prints, then enter a CCN in the sidebar — try **`686123`** (Kendall Lakes Healthcare and Rehab Center, Miami FL). Switch to **Compare facilities** in the sidebar to paste several CCNs at once.
+Open the local URL Streamlit prints, then enter a CCN in the sidebar — try **`686123`** (Kendall Lakes Healthcare and Rehab Center, Miami FL). Switch to **Compare facilities** in the sidebar to paste several CCNs at once. Don't have a CCN handy? Each mode has a **Look up a CCN on Medicare** button that opens Care Compare.
 
 > Need more facilities to test? `scripts/verify.py` (and the `find_test_ccns.py` helper) list real CCNs straight from the CMS dataset, filterable by state and rating.
 

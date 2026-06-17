@@ -9,8 +9,9 @@ import streamlit as st
 
 from medelite import config, presentation
 from medelite.cms_client import CMSClientError, get_claims, get_provider, get_state_averages
-from medelite.export.pdf import build_pdf
+from medelite.export.compare_pdf import build_comparison_pdf
 from medelite.export.docx import build_docx
+from medelite.export.pdf import build_pdf
 from medelite.models import ManualInputs
 from medelite.report import assemble_report
 from medelite.validation import parse_ccn_list, validate_ccn
@@ -20,6 +21,8 @@ st.set_page_config(page_title="Facility Assessment Snapshot", page_icon="🏥", 
 _SOURCE_ORDER = ["Facility", "U.S.", "State"]
 _SOURCE_COLORS = ["#E6007E", "#9AA0B4", "#1A73E8"]
 _RATING_LABELS = {"Overall Star Rating", "Health Inspection", "Staffing", "Quality of Resident Care"}
+_COMPARE_PALETTE = ["#E6007E", "#1A73E8", "#F5A623", "#34A853", "#9C27B0", "#00ACC1"]
+_CCN_LOOKUP_URL = "https://www.medicare.gov/care-compare/?providerType=NursingHome"
 
 # Rows shown in the side-by-side compare view (must match labels produced by presentation.all_rows).
 _COMPARE_LABELS = [
@@ -188,6 +191,12 @@ def sidebar_inputs() -> tuple[str, ManualInputs]:
     ccn = st.sidebar.text_input(
         "CMS Certification Number (CCN)", help="6-character CMS facility ID, e.g. 686123"
     ).strip()
+    st.sidebar.link_button(
+        "Look up a CCN on Medicare \u2197",
+        _CCN_LOOKUP_URL,
+        use_container_width=True,
+        help="Opens Medicare Care Compare — search any nursing home and its 6-digit CCN is in the profile.",
+    )
 
     st.sidebar.divider()
     st.sidebar.subheader("Manual details")
@@ -309,48 +318,128 @@ def render_single() -> None:
     render_qa(rep)
 
 
-def _render_comparison(reports) -> None:
-    rowmaps = [(rep, dict(presentation.all_rows(rep))) for rep in reports]
-
-    st.markdown(f"#### Comparing {len(reports)} facilities")
-
-    columns = {}
-    for rep, rowmap in rowmaps:
-        header = f"{rep.facility_name} ({rep.ccn})"
-        columns[header] = [rowmap.get(label, "N/A") for label in _COMPARE_LABELS]
-    df = pd.DataFrame(columns, index=_COMPARE_LABELS)
-    st.dataframe(df, use_container_width=True)
-
-    names = []
-    overall = []
-    for rep, rowmap in rowmaps:
-        name = rep.facility_name
-        names.append(name if len(name) <= 24 else name[:23] + "…")
-        value = rowmap.get("Overall Star Rating", "")
-        overall.append(int(value) if value.isdigit() else None)
-
-    fig = go.Figure(
-        go.Bar(
+def _compare_ratings_chart(rowmaps, names) -> go.Figure:
+    rating_keys = [
+        ("Overall", "Overall Star Rating"),
+        ("Health", "Health Inspection"),
+        ("Staffing", "Staffing"),
+        ("Quality", "Quality of Resident Care"),
+    ]
+    fig = go.Figure()
+    for (rating_label, key), color in zip(rating_keys, _COMPARE_PALETTE):
+        y = []
+        for rowmap in rowmaps:
+            value = rowmap.get(key, "")
+            y.append(int(value) if value.isdigit() else None)
+        fig.add_bar(
+            name=rating_label,
             x=names,
-            y=overall,
-            marker_color="#E6007E",
-            text=["" if o is None else str(o) for o in overall],
+            y=y,
+            marker_color=color,
+            text=["" if t is None else str(t) for t in y],
             textposition="outside",
             cliponaxis=False,
         )
-    )
     fig.update_layout(
-        height=320,
+        barmode="group",
+        height=340,
         margin=dict(l=10, r=10, t=24, b=10),
-        yaxis_title="Overall star rating",
+        yaxis_title="Star rating (1-5)",
+        legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5),
         plot_bgcolor="rgba(0,0,0,0)",
         paper_bgcolor="rgba(0,0,0,0)",
         font=dict(size=12),
     )
     fig.update_yaxes(range=[0, 5], showgrid=True, gridcolor="rgba(0,0,0,0.06)", zeroline=False)
     fig.update_xaxes(showgrid=False)
-    st.plotly_chart(fig, use_container_width=True)
-    st.caption("Pulled live from CMS. Higher star ratings are better; lower hospitalization/ED figures are better.")
+    return fig
+
+
+def _compare_metric_chart(reports, names, is_short: bool) -> go.Figure:
+    if is_short:
+        measures = [
+            ("Rehospitalization", "str_hospitalization", "str_hospitalization_national"),
+            ("ED visit", "str_ed_visit", "str_ed_visit_national"),
+        ]
+        y_title = "Percent"
+    else:
+        measures = [
+            ("Hospitalization", "lt_hospitalization", "lt_hospitalization_national"),
+            ("ED visit", "lt_ed_visit", "lt_ed_visit_national"),
+        ]
+        y_title = "Rate"
+
+    x = [m[0] for m in measures]
+    fig = go.Figure()
+    for idx, (rep, name) in enumerate(zip(reports, names)):
+        y = [getattr(rep.metrics, m[1]) if rep.metrics is not None else None for m in measures]
+        fig.add_bar(name=name, x=x, y=y, marker_color=_COMPARE_PALETTE[idx % len(_COMPARE_PALETTE)])
+
+    nat_source = next((rep for rep in reports if rep.metrics is not None), None)
+    if nat_source is not None:
+        national = [getattr(nat_source.metrics, m[2]) for m in measures]
+        fig.add_bar(name="U.S. avg", x=x, y=national, marker_color="#9AA0B4")
+
+    fig.update_layout(
+        barmode="group",
+        height=300,
+        margin=dict(l=10, r=10, t=24, b=10),
+        yaxis_title=y_title,
+        legend=dict(orientation="h", yanchor="bottom", y=-0.25, xanchor="center", x=0.5),
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        font=dict(size=11),
+    )
+    fig.update_yaxes(showgrid=True, gridcolor="rgba(0,0,0,0.06)", zeroline=False)
+    fig.update_xaxes(showgrid=False)
+    return fig
+
+
+def _render_comparison(reports) -> None:
+    rowmaps = [dict(presentation.all_rows(rep)) for rep in reports]
+    names = [rep.facility_name if len(rep.facility_name) <= 24 else rep.facility_name[:23] + "…" for rep in reports]
+
+    st.markdown(f"#### Comparing {len(reports)} facilities")
+
+    columns = {}
+    for rep, rowmap in zip(reports, rowmaps):
+        columns[f"{rep.facility_name} ({rep.ccn})"] = [rowmap.get(label, "N/A") for label in _COMPARE_LABELS]
+    df = pd.DataFrame(columns, index=_COMPARE_LABELS)
+    st.dataframe(df, use_container_width=True)
+
+    dl1, dl2 = st.columns(2)
+    with dl1:
+        st.download_button(
+            "Download comparison (CSV)",
+            data=df.to_csv().encode("utf-8"),
+            file_name="facility_comparison.csv",
+            mime="text/csv",
+            use_container_width=True,
+        )
+    with dl2:
+        st.download_button(
+            "Download comparison (PDF)",
+            data=build_comparison_pdf(reports),
+            file_name="facility_comparison.pdf",
+            mime="application/pdf",
+            use_container_width=True,
+        )
+
+    care_links = "  ·  ".join(f"[{rep.facility_name}]({rep.medicare_url})" for rep in reports)
+    st.markdown("**View on Medicare Care Compare:** " + care_links)
+
+    st.divider()
+    st.markdown("##### Star ratings")
+    st.plotly_chart(_compare_ratings_chart(rowmaps, names), use_container_width=True)
+
+    st.markdown("##### Hospitalization & ED outcomes — lower is better")
+    left, right = st.columns(2)
+    with left:
+        st.caption("Short-stay (% of residents)")
+        st.plotly_chart(_compare_metric_chart(reports, names, is_short=True), use_container_width=True)
+    with right:
+        st.caption("Long-stay (per 1,000 resident days)")
+        st.plotly_chart(_compare_metric_chart(reports, names, is_short=False), use_container_width=True)
 
 
 def render_compare() -> None:
@@ -360,6 +449,12 @@ def render_compare() -> None:
         placeholder="One per line or comma-separated:\n686123\n105007\n245001",
         height=150,
         help="Enter 2 or more CMS Certification Numbers.",
+    )
+    st.sidebar.link_button(
+        "Look up CCNs on Medicare \u2197",
+        _CCN_LOOKUP_URL,
+        use_container_width=True,
+        help="Opens Medicare Care Compare — find each nursing home's 6-digit CCN in its profile.",
     )
     ccns = parse_ccn_list(raw)
     if len(ccns) < 2:
