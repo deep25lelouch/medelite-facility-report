@@ -1,0 +1,9 @@
+# Runtime dependencies for Streamlit Community Cloud (pip install).
+# Dev tools (pytest, hypothesis, ruff) live in pyproject.toml and are not needed at runtime.
+streamlit>=1.40,<2
+pydantic>=2.0,<3
+requests>=2.28,<3
+pandas>=2.0,<3
+plotly>=5.18,<7
+reportlab>=4.0,<5
+python-docx>=1.1,<2
