@@ -180,10 +180,10 @@ def render_benchmarks(rep) -> None:
     left, right = st.columns(2)
     with left:
         st.caption("Short-stay (% of residents)")
-        st.plotly_chart(_benchmark_fig(short_stay, "Percent", True), use_container_width=True)
+        st.plotly_chart(_benchmark_fig(short_stay, "Percent", True), width="stretch")
     with right:
         st.caption("Long-stay (per 1,000 resident days)")
-        st.plotly_chart(_benchmark_fig(long_stay, "Rate", False), use_container_width=True)
+        st.plotly_chart(_benchmark_fig(long_stay, "Rate", False), width="stretch")
 
 
 def sidebar_inputs() -> tuple[str, ManualInputs]:
@@ -191,7 +191,7 @@ def sidebar_inputs() -> tuple[str, ManualInputs]:
     st.sidebar.link_button(
         "Look up a CCN on Medicare \u2197",
         _CCN_LOOKUP_URL,
-        use_container_width=True,
+        width="stretch",
         help="Opens Medicare Care Compare — search any nursing home and its 6-digit CCN is in the profile.",
     )
 
@@ -210,7 +210,7 @@ def sidebar_inputs() -> tuple[str, ManualInputs]:
             "Previous provider performance", placeholder="e.g. About 30 patients/day"
         )
         medical_coverage = st.text_input("Medical coverage", placeholder="e.g. Optometry, PCP, Podiatry")
-        st.form_submit_button("Generate snapshot", type="primary", use_container_width=True)
+        st.form_submit_button("Generate snapshot", type="primary", width="stretch")
 
     manual = ManualInputs(
         facility_name_override=name_override,
@@ -301,7 +301,7 @@ def render_single() -> None:
             data=build_pdf(rep),
             file_name=f"{rep.ccn or 'facility'}_assessment_snapshot.pdf",
             mime="application/pdf",
-            use_container_width=True,
+            width="stretch",
         )
     with col2:
         st.download_button(
@@ -309,10 +309,10 @@ def render_single() -> None:
             data=build_docx(rep),
             file_name=f"{rep.ccn or 'facility'}_assessment_snapshot.docx",
             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            use_container_width=True,
+            width="stretch",
         )
     with col3:
-        st.link_button("Medicare Care Compare \u2197", rep.medicare_url, use_container_width=True)
+        st.link_button("Medicare Care Compare \u2197", rep.medicare_url, width="stretch")
 
     render_benchmarks(rep)
     render_qa(rep)
@@ -405,7 +405,7 @@ def _render_comparison(reports) -> None:
     for rep, rowmap in zip(reports, rowmaps):
         columns[f"{rep.facility_name} ({rep.ccn})"] = [rowmap.get(label, "N/A") for label in _COMPARE_LABELS]
     df = pd.DataFrame(columns, index=_COMPARE_LABELS)
-    st.dataframe(df, use_container_width=True)
+    st.dataframe(df, width="stretch")
 
     dl1, dl2 = st.columns(2)
     with dl1:
@@ -414,7 +414,7 @@ def _render_comparison(reports) -> None:
             data=df.to_csv().encode("utf-8"),
             file_name="facility_comparison.csv",
             mime="text/csv",
-            use_container_width=True,
+            width="stretch",
         )
     with dl2:
         st.download_button(
@@ -422,7 +422,7 @@ def _render_comparison(reports) -> None:
             data=build_comparison_pdf(reports),
             file_name="facility_comparison.pdf",
             mime="application/pdf",
-            use_container_width=True,
+            width="stretch",
         )
 
     care_links = "  ·  ".join(f"[{rep.facility_name}]({rep.medicare_url})" for rep in reports)
@@ -430,16 +430,16 @@ def _render_comparison(reports) -> None:
 
     st.divider()
     st.markdown("##### Star ratings")
-    st.plotly_chart(_compare_ratings_chart(rowmaps, names), use_container_width=True)
+    st.plotly_chart(_compare_ratings_chart(rowmaps, names), width="stretch")
 
     st.markdown("##### Hospitalization & ED outcomes — lower is better")
     left, right = st.columns(2)
     with left:
         st.caption("Short-stay (% of residents)")
-        st.plotly_chart(_compare_metric_chart(reports, names, is_short=True), use_container_width=True)
+        st.plotly_chart(_compare_metric_chart(reports, names, is_short=True), width="stretch")
     with right:
         st.caption("Long-stay (per 1,000 resident days)")
-        st.plotly_chart(_compare_metric_chart(reports, names, is_short=False), use_container_width=True)
+        st.plotly_chart(_compare_metric_chart(reports, names, is_short=False), width="stretch")
 
 
 def render_compare() -> None:
@@ -447,7 +447,7 @@ def render_compare() -> None:
     st.sidebar.link_button(
         "Look up CCNs on Medicare \u2197",
         _CCN_LOOKUP_URL,
-        use_container_width=True,
+        width="stretch",
         help="Opens Medicare Care Compare — find each nursing home's 6-digit CCN in its profile.",
     )
 
@@ -458,7 +458,7 @@ def render_compare() -> None:
             height=150,
             help="Enter 2 or more CMS Certification Numbers.",
         )
-        st.form_submit_button("Compare facilities", type="primary", use_container_width=True)
+        st.form_submit_button("Compare facilities", type="primary", width="stretch")
 
     ccns = parse_ccn_list(raw)
     if len(ccns) < 2:

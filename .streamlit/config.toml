@@ -1,9 +1,8 @@
 [theme]
 primaryColor = "#E6007E"
-backgroundColor = "#FFFFFF"
-secondaryBackgroundColor = "#F5F6FA"
-textColor = "#1A1A2E"
-font = "sans serif"
 
 [server]
-headless = true
+# "poll" avoids the inotify watch limit on Streamlit Community Cloud (the default
+# watchdog/inotify watcher floods the logs with "inotify watch limit reached"),
+# while still supporting hot-reload locally.
+fileWatcherType = "poll"

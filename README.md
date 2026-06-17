@@ -6,13 +6,16 @@
 
 A lightweight micro-app that pulls live CMS nursing-home data for any facility, merges it with manual operational fields, and renders a polished **Facility Assessment Snapshot** with one-click **PDF** and **Word** export — plus a side-by-side **compare mode** for evaluating several facilities at once.
 
+### ▶ Live app: **https://medelite-facility-report.streamlit.app**
+
+[![Live app](https://img.shields.io/badge/▶_live_app-streamlit-E6007E?logo=streamlit&logoColor=white)](https://medelite-facility-report.streamlit.app)
+[![CI](https://github.com/deep25lelouch/medelite-facility-report/actions/workflows/ci.yml/badge.svg)](https://github.com/deep25lelouch/medelite-facility-report/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
 ![Streamlit](https://img.shields.io/badge/Streamlit-FF4B4B?logo=streamlit&logoColor=white)
 ![Pydantic](https://img.shields.io/badge/Pydantic-v2-E92063?logo=pydantic&logoColor=white)
 ![Plotly](https://img.shields.io/badge/Plotly-3F4F75?logo=plotly&logoColor=white)
-![Poetry](https://img.shields.io/badge/Poetry-60A5FA?logo=poetry&logoColor=white)
+[Poetry](https://img.shields.io/badge/Poetry-60A5FA?logo=poetry&logoColor=white)
 ![Tested](https://img.shields.io/badge/tested-pytest%20%2B%20Hypothesis-2ea44f?logo=pytest&logoColor=white)
-[![CI](https://github.com/<deep25lelouch>/medelite-facility-report/actions/workflows/ci.yml/badge.svg)](https://github.com/<your-username>/medelite-facility-report/actions/workflows/ci.yml)
 
 </div>
 
@@ -148,8 +151,9 @@ medelite-facility-report/
 ├─ tests/                      # ~39 tests (pytest + Hypothesis)
 ├─ scripts/verify.py           # live CMS dataset/slug verifier
 ├─ .github/workflows/ci.yml    # CI: ruff + pytest on every push
-├─ .streamlit/config.toml      # theme (magenta primary)
-├─ pyproject.toml              # Poetry config + dependencies
+├─ .streamlit/config.toml      # theme (magenta primary) + file-watcher setting
+├─ requirements.txt            # runtime deps (used by Streamlit Community Cloud)
+├─ pyproject.toml              # Poetry config + dependencies (local dev)
 ├─ poetry.lock
 └─ README.md
 ```
@@ -161,7 +165,7 @@ medelite-facility-report/
 **Requirements:** Python 3.11+ and [Poetry](https://python-poetry.org/).
 
 ```bash
-git clone https://github.com/<your-username>/medelite-facility-report.git
+git clone https://github.com/deep25lelouch/medelite-facility-report.git
 cd medelite-facility-report
 poetry install
 poetry run streamlit run streamlit_app.py
@@ -188,11 +192,9 @@ A **GitHub Actions** workflow (`.github/workflows/ci.yml`) installs the project 
 
 ## Deployment (Streamlit Community Cloud)
 
-1. Push the repo to **public** GitHub.
-2. On [share.streamlit.io](https://share.streamlit.io) → **New app** → select the repo, branch, and `streamlit_app.py`.
-3. Dependencies install automatically from `pyproject.toml` / `poetry.lock`. The project sets `package-mode = false`, so Poetry skips trying to install the repo itself as a package.
+Deployed from this repo's `main` branch with `streamlit_app.py` as the entry point. Streamlit Community Cloud installs runtime dependencies from `requirements.txt`.
 
-> ⏰ The free tier **sleeps** after inactivity. Open the live URL a minute before any demo so it's warm.
+> ⏰ The free tier **sleeps** after inactivity — open the live URL a minute before a demo so it's warm.
 
 **Scale path (if Medelite evaluated many facilities at once):** schedule a monthly **Airflow** job to snapshot the CMS datasets into **Postgres/Snowflake**, and point the app at the warehouse instead of the live API — caching benchmarks and enabling cross-facility comparison. Intentionally *not* built here, since the brief is a single-facility report generator and added infrastructure would over-scope it.
 
