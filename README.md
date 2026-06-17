@@ -12,7 +12,7 @@ A lightweight micro-app that pulls live CMS nursing-home data for any facility, 
 ![Plotly](https://img.shields.io/badge/Plotly-3F4F75?logo=plotly&logoColor=white)
 ![Poetry](https://img.shields.io/badge/Poetry-60A5FA?logo=poetry&logoColor=white)
 ![Tested](https://img.shields.io/badge/tested-pytest%20%2B%20Hypothesis-2ea44f?logo=pytest&logoColor=white)
-[![CI](https://github.com/<your-username>/medelite-facility-report/actions/workflows/ci.yml/badge.svg)](https://github.com/<your-username>/medelite-facility-report/actions/workflows/ci.yml)
+[![CI](https://github.com/deep25lelouch/medelite-facility-report/actions/workflows/ci.yml/badge.svg)](https://github.com/<your-username>/medelite-facility-report/actions/workflows/ci.yml)
 
 </div>
 
