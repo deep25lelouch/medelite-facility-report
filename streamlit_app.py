@@ -188,9 +188,6 @@ def render_benchmarks(rep) -> None:
 
 def sidebar_inputs() -> tuple[str, ManualInputs]:
     st.sidebar.header("Facility lookup")
-    ccn = st.sidebar.text_input(
-        "CMS Certification Number (CCN)", help="6-character CMS facility ID, e.g. 686123"
-    ).strip()
     st.sidebar.link_button(
         "Look up a CCN on Medicare \u2197",
         _CCN_LOOKUP_URL,
@@ -198,19 +195,22 @@ def sidebar_inputs() -> tuple[str, ManualInputs]:
         help="Opens Medicare Care Compare — search any nursing home and its 6-digit CCN is in the profile.",
     )
 
-    st.sidebar.divider()
-    st.sidebar.subheader("Manual details")
-    name_override = st.sidebar.text_input(
-        "Facility name (override)", help="Leave blank to use the official CMS name."
-    )
-    emr = st.sidebar.text_input("EMR", placeholder="e.g. PCC")
-    current_census = st.sidebar.number_input("Current census", min_value=0, max_value=100000, value=0, step=1)
-    patient_type = st.sidebar.text_input("Type of patient", placeholder="e.g. Long-term & Short-term")
-    previous_coverage = st.sidebar.selectbox("Previous coverage from Medelite", ["", "Yes", "No"])
-    previous_performance = st.sidebar.text_input(
-        "Previous provider performance", placeholder="e.g. About 30 patients/day"
-    )
-    medical_coverage = st.sidebar.text_input("Medical coverage", placeholder="e.g. Optometry, PCP, Podiatry")
+    with st.sidebar.form("single_lookup"):
+        ccn = st.text_input(
+            "CMS Certification Number (CCN)", help="6-character CMS facility ID, e.g. 686123"
+        ).strip()
+        st.divider()
+        st.markdown("**Manual details** _(optional)_")
+        name_override = st.text_input("Facility name (override)", help="Leave blank to use the official CMS name.")
+        emr = st.text_input("EMR", placeholder="e.g. PCC")
+        current_census = st.number_input("Current census", min_value=0, max_value=100000, value=0, step=1)
+        patient_type = st.text_input("Type of patient", placeholder="e.g. Long-term & Short-term")
+        previous_coverage = st.selectbox("Previous coverage from Medelite", ["", "Yes", "No"])
+        previous_performance = st.text_input(
+            "Previous provider performance", placeholder="e.g. About 30 patients/day"
+        )
+        medical_coverage = st.text_input("Medical coverage", placeholder="e.g. Optometry, PCP, Podiatry")
+        st.form_submit_button("Generate snapshot", type="primary", use_container_width=True)
 
     manual = ManualInputs(
         facility_name_override=name_override,
@@ -253,7 +253,7 @@ def render_single() -> None:
     ccn, manual = sidebar_inputs()
 
     if not ccn:
-        st.info("Enter a facility CCN in the sidebar to generate a snapshot.")
+        st.info("Enter a facility CCN in the sidebar and click **Generate snapshot** (or press Enter).")
         return
 
     ccn_error = validate_ccn(ccn)
@@ -444,21 +444,25 @@ def _render_comparison(reports) -> None:
 
 def render_compare() -> None:
     st.sidebar.header("Compare facilities")
-    raw = st.sidebar.text_area(
-        "CCNs to compare",
-        placeholder="One per line or comma-separated:\n686123\n105007\n245001",
-        height=150,
-        help="Enter 2 or more CMS Certification Numbers.",
-    )
     st.sidebar.link_button(
         "Look up CCNs on Medicare \u2197",
         _CCN_LOOKUP_URL,
         use_container_width=True,
         help="Opens Medicare Care Compare — find each nursing home's 6-digit CCN in its profile.",
     )
+
+    with st.sidebar.form("compare_lookup"):
+        raw = st.text_area(
+            "CCNs to compare",
+            placeholder="One per line or comma-separated:\n686123\n105007\n245001",
+            height=150,
+            help="Enter 2 or more CMS Certification Numbers.",
+        )
+        st.form_submit_button("Compare facilities", type="primary", use_container_width=True)
+
     ccns = parse_ccn_list(raw)
     if len(ccns) < 2:
-        st.info("Enter two or more CCNs in the sidebar to compare facilities side by side.")
+        st.info("Enter two or more CCNs in the sidebar and click **Compare facilities**.")
         return
 
     max_facilities = 6
