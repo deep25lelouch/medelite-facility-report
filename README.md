@@ -14,7 +14,7 @@ A lightweight micro-app that pulls live CMS nursing-home data for any facility, 
 ![Streamlit](https://img.shields.io/badge/Streamlit-FF4B4B?logo=streamlit&logoColor=white)
 ![Pydantic](https://img.shields.io/badge/Pydantic-v2-E92063?logo=pydantic&logoColor=white)
 ![Plotly](https://img.shields.io/badge/Plotly-3F4F75?logo=plotly&logoColor=white)
-[Poetry](https://img.shields.io/badge/Poetry-60A5FA?logo=poetry&logoColor=white)
+![Poetry](https://img.shields.io/badge/Poetry-60A5FA?logo=poetry&logoColor=white)
 ![Tested](https://img.shields.io/badge/tested-pytest%20%2B%20Hypothesis-2ea44f?logo=pytest&logoColor=white)
 
 </div>
