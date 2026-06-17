@@ -1,15 +1,44 @@
+# ---- Python bytecode / caches ----
 __pycache__/
 *.py[cod]
-*.egg-info/
+*$py.class
+
+# ---- Virtual environments ----
 .venv/
 venv/
-.env
-.streamlit/secrets.toml
+env/
+ENV/
+
+# ---- Test & tooling caches ----
 .pytest_cache/
+.hypothesis/
 .ruff_cache/
 .mypy_cache/
-dist/
+.coverage
+.coverage.*
+htmlcov/
+*.cover
+
+# ---- Streamlit (keep config.toml; never commit secrets) ----
+.streamlit/secrets.toml
+
+# ---- Packaging / build artifacts ----
 build/
+dist/
+*.egg-info/
+.eggs/
+
+# ---- Environment / secrets ----
+.env
+.env.*
+*.local
+
+# ---- OS / editor cruft ----
 .DS_Store
+Thumbs.db
 .idea/
 .vscode/
+*.swp
+*~
+
+# NOTE: poetry.lock is intentionally committed (reproducible installs / Streamlit Cloud).

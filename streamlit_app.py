@@ -3,15 +3,33 @@ from __future__ import annotations
 
 import html
 
+import plotly.graph_objects as go
 import streamlit as st
 
 from medelite import config, presentation
 from medelite.cms_client import CMSClientError, get_claims, get_provider, get_state_averages
 from medelite.export.pdf import build_pdf
+from medelite.export.docx import build_docx
 from medelite.models import ManualInputs
 from medelite.report import assemble_report
+from medelite.validation import validate_ccn
 
 st.set_page_config(page_title="Facility Assessment Snapshot", page_icon="🏥", layout="centered")
+
+_SOURCE_ORDER = ["Facility", "U.S.", "State"]
+_SOURCE_COLORS = ["#E6007E", "#9AA0B4", "#1A73E8"]
+_RATING_LABELS = {"Overall Star Rating", "Health Inspection", "Staffing", "Quality of Resident Care"}
+
+_TABLE_CSS = """
+<style>
+  table.fas { width:100%; border-collapse:collapse; font-size:0.95rem; margin-top:0.25rem; }
+  table.fas td { border:1px solid #d9d9e3; padding:8px 12px; vertical-align:top; }
+  table.fas td.lbl { background:#F5F6FA; font-weight:600; width:55%; }
+  table.fas td.val { width:45%; }
+  table.fas td.sec { background:#FCE7F3; color:#9D174D; font-weight:700; text-align:left;
+                     letter-spacing:0.5px; font-size:0.78rem; text-transform:uppercase; padding:7px 12px; }
+</style>
+"""
 
 
 @st.cache_data(show_spinner="Fetching CMS data...")
@@ -49,24 +67,105 @@ def render_header() -> None:
     )
 
 
-def render_report_table(rows: list[tuple[str, str]]) -> None:
-    body = "".join(
-        f"<tr><td class='lbl'>{html.escape(label)}</td>"
-        f"<td class='val'>{html.escape(value)}</td></tr>"
-        for label, value in rows
+def _stars_html(n: int) -> str:
+    filled = '<span style="color:#F5A623;">★</span>' * n
+    empty = '<span style="color:#D9D9E3;">★</span>' * (5 - n)
+    return f"{filled}{empty} <span style='color:#777; font-size:0.85em;'>({n})</span>"
+
+
+def render_report_table(mvp_rows, metric_rows) -> None:
+    def cell_value(label: str, value: str) -> str:
+        if label in _RATING_LABELS and value.isdigit() and 1 <= int(value) <= 5:
+            return _stars_html(int(value))
+        return html.escape(value)
+
+    def row(label: str, value: str) -> str:
+        return (
+            f"<tr><td class='lbl'>{html.escape(label)}</td>"
+            f"<td class='val'>{cell_value(label, value)}</td></tr>"
+        )
+
+    parts = [row(label, value) for label, value in mvp_rows]
+    if metric_rows:
+        parts.append("<tr><td class='sec' colspan='2'>Hospitalization &amp; ED Metrics</td></tr>")
+        parts.extend(row(label, value) for label, value in metric_rows)
+    st.markdown(_TABLE_CSS + f"<table class='fas'>{''.join(parts)}</table>", unsafe_allow_html=True)
+
+
+def _benchmark_fig(measures, y_title: str, is_pct: bool) -> go.Figure:
+    names = [row[0] for row in measures]
+    fig = go.Figure()
+    for offset, (source, color) in enumerate(zip(_SOURCE_ORDER, _SOURCE_COLORS)):
+        vals = [row[offset + 1] for row in measures]
+        labels = ["" if v is None else (f"{v:.1f}%" if is_pct else f"{v:.2f}") for v in vals]
+        fig.add_bar(
+            name=source,
+            x=names,
+            y=vals,
+            marker_color=color,
+            text=labels,
+            textposition="outside",
+            cliponaxis=False,
+        )
+    fig.update_layout(
+        barmode="group",
+        height=300,
+        margin=dict(l=10, r=10, t=24, b=10),
+        legend=dict(orientation="h", yanchor="bottom", y=-0.22, xanchor="center", x=0.5),
+        yaxis_title=y_title,
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        font=dict(size=12),
     )
-    st.markdown(
-        f"""
-        <style>
-          table.fas {{ width:100%; border-collapse:collapse; font-size:0.95rem; margin-top:0.25rem; }}
-          table.fas td {{ border:1px solid #d9d9e3; padding:8px 12px; vertical-align:top; }}
-          table.fas td.lbl {{ background:#F5F6FA; font-weight:600; width:55%; }}
-          table.fas td.val {{ width:45%; }}
-        </style>
-        <table class="fas">{body}</table>
-        """,
-        unsafe_allow_html=True,
-    )
+    fig.update_yaxes(showgrid=True, gridcolor="rgba(0,0,0,0.06)", zeroline=False)
+    fig.update_xaxes(showgrid=False)
+    return fig
+
+
+def render_benchmarks(rep) -> None:
+    """Data cards (facility vs U.S. delta) + grouped Plotly bar charts for the 12 metrics."""
+    m = rep.metrics
+    if m is None:
+        return
+
+    st.divider()
+    st.markdown("##### Hospitalization & ED benchmarks")
+    st.caption("Facility value with the change vs the U.S. average — green means better (lower).")
+
+    cards = [
+        ("Short-stay rehospitalization", m.str_hospitalization, m.str_hospitalization_national, True),
+        ("Short-stay ED visit", m.str_ed_visit, m.str_ed_visit_national, True),
+        ("Long-stay hospitalization / 1k", m.lt_hospitalization, m.lt_hospitalization_national, False),
+        ("Long-stay ED visit / 1k", m.lt_ed_visit, m.lt_ed_visit_national, False),
+    ]
+    for col, (label, fac, nat, is_pct) in zip(st.columns(4), cards):
+        with col:
+            if fac is None:
+                st.metric(label, "N/A")
+                continue
+            value = f"{fac:.1f}%" if is_pct else f"{fac:.2f}"
+            delta = None
+            if nat is not None:
+                diff = fac - nat
+                delta = f"{diff:+.1f}%" if is_pct else f"{diff:+.2f}"
+            st.metric(label, value, delta=delta, delta_color="inverse")
+
+    short_stay = [
+        ("Rehospitalization", m.str_hospitalization, m.str_hospitalization_national, m.str_hospitalization_state),
+        ("ED visit", m.str_ed_visit, m.str_ed_visit_national, m.str_ed_visit_state),
+    ]
+    long_stay = [
+        ("Hospitalization", m.lt_hospitalization, m.lt_hospitalization_national, m.lt_hospitalization_state),
+        ("ED visit", m.lt_ed_visit, m.lt_ed_visit_national, m.lt_ed_visit_state),
+    ]
+
+    left, right = st.columns(2)
+    with left:
+        st.caption("Short-stay (% of residents)")
+        st.plotly_chart(_benchmark_fig(short_stay, "Percent", True), use_container_width=True)
+    with right:
+        st.caption("Long-stay (per 1,000 resident days)")
+        st.plotly_chart(_benchmark_fig(long_stay, "Rate", False), use_container_width=True)
 
 
 def sidebar_inputs() -> tuple[str, ManualInputs]:
@@ -120,10 +219,19 @@ def main() -> None:
         st.info("Enter a facility CCN in the sidebar to generate a snapshot.")
         return
 
+    ccn_error = validate_ccn(ccn)
+    if ccn_error:
+        st.error(ccn_error)
+        return
+
     try:
         provider_raw = fetch_provider(ccn)
     except CMSClientError as exc:
-        st.error(f"Could not reach the CMS Provider Data API: {exc}")
+        st.error(
+            "Couldn't reach the CMS Provider Data API right now — this is usually a temporary "
+            "network issue. Please try again in a moment."
+        )
+        st.caption(f"Technical detail: {exc}")
         return
 
     claims_rows: list = []
@@ -133,17 +241,23 @@ def main() -> None:
             claims_rows = fetch_claims(ccn)
             state_avg_rows = fetch_state_averages()
         except CMSClientError:
-            st.info("Hospitalization/ED metrics are temporarily unavailable (CMS metrics endpoint error).")
+            st.info(
+                "The facility profile loaded, but the hospitalization/ED metrics couldn't be "
+                "fetched right now — the rest of the snapshot is complete."
+            )
 
     rep = assemble_report(ccn, provider_raw, manual, claims_rows, state_avg_rows)
 
     if not rep.cms_record_found:
-        st.warning(f"No CMS record found for CCN '{ccn}'. Showing a report built from your manual inputs.")
+        st.warning(
+            f"No CMS nursing-home record matched CCN **{ccn}**. Double-check the number on "
+            "Medicare Care Compare — or, if it's correct, the snapshot below uses your manual inputs."
+        )
 
     st.markdown(f"#### {html.escape(rep.facility_name)}")
-    render_report_table(presentation.all_rows(rep))
+    render_report_table(presentation.mvp_rows(rep), presentation.metric_rows(rep))
 
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
     with col1:
         st.download_button(
             "Download PDF",
@@ -153,8 +267,17 @@ def main() -> None:
             use_container_width=True,
         )
     with col2:
-        st.link_button("View on Medicare Care Compare \u2197", rep.medicare_url, use_container_width=True)
+        st.download_button(
+            "Download Word",
+            data=build_docx(rep),
+            file_name=f"{rep.ccn or 'facility'}_assessment_snapshot.docx",
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            use_container_width=True,
+        )
+    with col3:
+        st.link_button("Medicare Care Compare \u2197", rep.medicare_url, use_container_width=True)
 
+    render_benchmarks(rep)
     render_qa(rep)
 
 
