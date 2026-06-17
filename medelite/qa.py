@@ -7,6 +7,7 @@ the schema check fails loud rather than silently producing nulls.
 """
 from __future__ import annotations
 
+import math
 from typing import Any, Iterable, Optional
 
 from medelite.models import QAReport, QAStatus
@@ -52,17 +53,36 @@ def _clean(value: Any) -> Optional[str]:
     return s or None
 
 
+def _to_float(text: str) -> Optional[float]:
+    """Parse a cleaned string into a FINITE float, or None.
+
+    Rejects inf / -inf / nan and overflow (e.g. "INF", "1e999", "nan"), which otherwise blow up a
+    later int() with OverflowError. CMS never sends these, but the parser must not crash on them.
+    """
+    try:
+        value = float(text)
+    except (ValueError, OverflowError):
+        return None
+    return value if math.isfinite(value) else None
+
+
+def parse_float(value: Any) -> Optional[float]:
+    """Best-effort finite-float parse with NO QA recording (for adjusted->observed fallback chains)."""
+    s = _clean(value)
+    return _to_float(s) if s is not None else None
+
+
 def coerce_int(raw: dict[str, Any], slug: str, label: str, qa: QAReport) -> Optional[int]:
     """Parse an integer field; record MISSING / OUT_OF_RANGE as appropriate."""
     s = _clean(raw.get(slug))
     if s is None:
         qa.add(label, QAStatus.MISSING, f"{label}: no value supplied by CMS.")
         return None
-    try:
-        return int(float(s))  # tolerate "120" and "120.0"
-    except ValueError:
-        qa.add(label, QAStatus.OUT_OF_RANGE, f"{label}: could not parse '{s}' as a number.")
+    value = _to_float(s)  # tolerate "120" and "120.0"; rejects inf/nan
+    if value is None:
+        qa.add(label, QAStatus.OUT_OF_RANGE, f"{label}: could not parse '{s}' as a finite number.")
         return None
+    return int(value)
 
 
 def coerce_float(raw: dict[str, Any], slug: str, label: str, qa: QAReport) -> Optional[float]:
@@ -71,11 +91,11 @@ def coerce_float(raw: dict[str, Any], slug: str, label: str, qa: QAReport) -> Op
     if s is None:
         qa.add(label, QAStatus.MISSING, f"{label}: no value supplied by CMS.")
         return None
-    try:
-        return float(s)
-    except ValueError:
-        qa.add(label, QAStatus.OUT_OF_RANGE, f"{label}: could not parse '{s}' as a number.")
+    value = _to_float(s)
+    if value is None:
+        qa.add(label, QAStatus.OUT_OF_RANGE, f"{label}: could not parse '{s}' as a finite number.")
         return None
+    return value
 
 
 def coerce_rating(
@@ -87,8 +107,8 @@ def coerce_rating(
 ) -> Optional[int]:
     """Parse a 1-5 star rating.
 
-    Empty value + footnote -> N/A with the footnote meaning recorded. Out-of-range or unparseable
-    values are rejected (OUT_OF_RANGE).
+    Empty value + footnote -> N/A with the footnote meaning recorded. Out-of-range, non-finite, or
+    unparseable values are rejected (OUT_OF_RANGE).
     """
     s = _clean(raw.get(slug))
     if s is None:
@@ -99,11 +119,11 @@ def coerce_rating(
         else:
             qa.add(label, QAStatus.MISSING, f"{label}: no rating supplied by CMS.")
         return None
-    try:
-        rating = int(float(s))
-    except ValueError:
+    value = _to_float(s)
+    if value is None:
         qa.add(label, QAStatus.OUT_OF_RANGE, f"{label}: could not parse rating '{s}'.")
         return None
+    rating = int(value)
     if not 1 <= rating <= 5:
         qa.add(label, QAStatus.OUT_OF_RANGE, f"{label}: rating {rating} is outside the valid 1-5 range.")
         return None

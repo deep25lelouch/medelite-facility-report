@@ -1,8 +1,8 @@
 """PDF export (reportlab).
 
 Render a ReportModel as a downloadable Facility Assessment Snapshot that mirrors the on-screen
-layout: branded header, the 2-column table (shared rows via presentation.mvp_rows), and a clickable
-Medicare Care Compare link. Output is vector text (selectable, print-ready), not a rasterized image.
+layout: branded header, the full table (13 MVP rows + 12 metric rows via presentation.all_rows),
+and a clickable Medicare Care Compare link. Vector text (selectable, print-ready), not an image.
 """
 from __future__ import annotations
 
@@ -22,8 +22,6 @@ from medelite.models import ReportModel
 _LABEL_BG = colors.HexColor("#F5F6FA")
 _BORDER = colors.HexColor("#D9D9E3")
 _INK = colors.HexColor("#1A1A2E")
-_GREY = colors.HexColor("#666666")
-_LINK = colors.HexColor("#1A73E8")
 
 
 def build_pdf(rep: ReportModel) -> bytes:
@@ -63,7 +61,7 @@ def build_pdf(rep: ReportModel) -> bytes:
 
     data = [
         [Paragraph(escape(lbl), label), Paragraph(escape(val), cell)]
-        for lbl, val in presentation.mvp_rows(rep)
+        for lbl, val in presentation.all_rows(rep)
     ]
     table = Table(data, colWidths=[3.1 * inch, 3.6 * inch])
     table.setStyle(

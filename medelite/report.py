@@ -1,7 +1,7 @@
 """Assemble a ReportModel from CMS data + manual operational inputs.
 
-build_report() is the convenience entry point (fetches, then assembles); assemble_report() is the
-pure function the UI and tests use when the raw payload is already in hand (no network).
+build_report() is the convenience entry point (fetches all three datasets, then assembles);
+assemble_report() is the pure function the UI and tests use when the raw payloads are in hand.
 """
 from __future__ import annotations
 
@@ -31,8 +31,11 @@ def assemble_report(
     ccn: str,
     provider_raw: Optional[dict[str, Any]],
     manual: ManualInputs,
+    claims_rows: Optional[list[dict[str, Any]]] = None,
+    state_avg_rows: Optional[list[dict[str, Any]]] = None,
 ) -> ReportModel:
-    """Build the report from an already-fetched provider row (or None if not found)."""
+    """Build the report from already-fetched payloads. Metrics are populated only when claims rows
+    are supplied (bonus); the MVP path passes none and metrics stays None."""
     ccn = (ccn or "").strip()
     qa = QAReport(ccn=ccn)
 
@@ -55,6 +58,10 @@ def assemble_report(
     qa_tools.assert_schema(provider_raw, mapping.REQUIRED_PROVIDER_SLUGS, qa)
     state = str(provider_raw.get("state", "")).strip() or None
 
+    metrics = None
+    if claims_rows:
+        metrics = normalize.build_metrics(claims_rows, state_avg_rows or [], state, qa)
+
     return ReportModel(
         ccn=ccn,
         facility_name=resolve_facility_name(manual.facility_name_override, provider_raw),
@@ -65,6 +72,7 @@ def assemble_report(
         ),
         cms_record_found=True,
         ratings=normalize.normalize_ratings(provider_raw, qa),
+        metrics=metrics,
         manual=manual,
         medicare_url=config.medicare_profile_url(ccn, state),
         qa=qa,
@@ -72,6 +80,8 @@ def assemble_report(
 
 
 def build_report(ccn: str, manual: ManualInputs) -> ReportModel:
-    """Fetch the CMS record then assemble the report. Raises CMSClientError on API failure."""
+    """Fetch all three CMS datasets then assemble the full report (incl. the 12 metrics)."""
     provider_raw = cms_client.get_provider(ccn)
-    return assemble_report(ccn, provider_raw, manual)
+    claims_rows = cms_client.get_claims(ccn) if provider_raw is not None else []
+    state_avg_rows = cms_client.get_state_averages() if provider_raw is not None else []
+    return assemble_report(ccn, provider_raw, manual, claims_rows, state_avg_rows)

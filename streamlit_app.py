@@ -6,7 +6,7 @@ import html
 import streamlit as st
 
 from medelite import config, presentation
-from medelite.cms_client import CMSClientError, get_provider
+from medelite.cms_client import CMSClientError, get_claims, get_provider, get_state_averages
 from medelite.export.pdf import build_pdf
 from medelite.models import ManualInputs
 from medelite.report import assemble_report
@@ -16,8 +16,20 @@ st.set_page_config(page_title="Facility Assessment Snapshot", page_icon="🏥", 
 
 @st.cache_data(show_spinner="Fetching CMS data...")
 def fetch_provider(ccn: str):
-    """Cached CMS lookup so editing manual fields never refetches. Returns a row dict or None."""
+    """Cached Provider Information lookup. Returns a row dict or None."""
     return get_provider(ccn)
+
+
+@st.cache_data(show_spinner=False)
+def fetch_claims(ccn: str):
+    """Cached Claims QM lookup (for the 12 metrics). Returns a list of rows."""
+    return get_claims(ccn)
+
+
+@st.cache_data(show_spinner=False)
+def fetch_state_averages():
+    """Cached State US Averages (national + per-state rows). Fetched once per session."""
+    return get_state_averages()
 
 
 def render_header() -> None:
@@ -114,13 +126,22 @@ def main() -> None:
         st.error(f"Could not reach the CMS Provider Data API: {exc}")
         return
 
-    rep = assemble_report(ccn, provider_raw, manual)
+    claims_rows: list = []
+    state_avg_rows: list = []
+    if provider_raw is not None:
+        try:
+            claims_rows = fetch_claims(ccn)
+            state_avg_rows = fetch_state_averages()
+        except CMSClientError:
+            st.info("Hospitalization/ED metrics are temporarily unavailable (CMS metrics endpoint error).")
+
+    rep = assemble_report(ccn, provider_raw, manual, claims_rows, state_avg_rows)
 
     if not rep.cms_record_found:
         st.warning(f"No CMS record found for CCN '{ccn}'. Showing a report built from your manual inputs.")
 
     st.markdown(f"#### {html.escape(rep.facility_name)}")
-    render_report_table(presentation.mvp_rows(rep))
+    render_report_table(presentation.all_rows(rep))
 
     col1, col2 = st.columns(2)
     with col1:

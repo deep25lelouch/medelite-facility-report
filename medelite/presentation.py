@@ -2,7 +2,7 @@
 
 Turns a ReportModel into the ordered (label, value) rows of the Facility Assessment Snapshot,
 driven by the mapping registry so the layout is defined in exactly one place. Blank/None values
-render as 'N/A'.
+render as 'N/A'. The 12 bonus metrics are formatted as percentages (short-stay) or rates (long-stay).
 """
 from __future__ import annotations
 
@@ -19,6 +19,15 @@ def format_value(value: Any) -> str:
         return NA
     s = str(value).strip()
     return s if s else NA
+
+
+def format_metric(key: str, value: Any) -> str:
+    """Short-stay (str_*) metrics are percentages; long-stay (lt_*) are rates per 1000 days."""
+    if value is None:
+        return NA
+    if key.startswith("str_"):
+        return f"{value:.1f}%"
+    return f"{value:.2f}"
 
 
 def mvp_rows(rep: ReportModel) -> list[tuple[str, str]]:
@@ -39,3 +48,18 @@ def mvp_rows(rep: ReportModel) -> list[tuple[str, str]]:
         "quality_of_resident_care": rep.ratings.quality_of_resident_care,
     }
     return [(spec.label, format_value(values.get(spec.key))) for spec in mapping.MVP_FIELDS]
+
+
+def metric_rows(rep: ReportModel) -> list[tuple[str, str]]:
+    """The 12 hospitalization/ED rows (empty list if metrics were not built)."""
+    if rep.metrics is None:
+        return []
+    return [
+        (spec.label, format_metric(spec.key, getattr(rep.metrics, spec.key, None)))
+        for spec in mapping.BONUS_FIELDS
+    ]
+
+
+def all_rows(rep: ReportModel) -> list[tuple[str, str]]:
+    """Full snapshot: 13 MVP rows followed by the 12 metric rows (when present)."""
+    return mvp_rows(rep) + metric_rows(rep)

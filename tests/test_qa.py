@@ -34,10 +34,24 @@ def test_coerce_rating_unparseable():
     assert not qa.ok
 
 
+def test_coerce_rating_rejects_non_finite():
+    # regression: float("INF")/("nan")/("1e999") must not crash int(); they become OUT_OF_RANGE -> None
+    for bad in ("INF", "inf", "-inf", "nan", "1e999"):
+        qa = _qa()
+        assert qa_tools.coerce_rating({"overall_rating": bad}, "overall_rating", "Overall", qa) is None
+        assert not qa.ok
+
+
 def test_coerce_int_tolerates_float_string():
     qa = _qa()
     assert qa_tools.coerce_int({"number_of_certified_beds": "120"}, "number_of_certified_beds", "Beds", qa) == 120
     assert qa_tools.coerce_int({"number_of_certified_beds": "120.0"}, "number_of_certified_beds", "Beds", qa) == 120
+
+
+def test_coerce_int_rejects_non_finite():
+    qa = _qa()
+    assert qa_tools.coerce_int({"number_of_certified_beds": "INF"}, "number_of_certified_beds", "Beds", qa) is None
+    assert any(i.status == QAStatus.OUT_OF_RANGE for i in qa.issues)
 
 
 def test_coerce_int_missing():

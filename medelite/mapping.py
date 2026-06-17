@@ -43,10 +43,7 @@ REPORT_FIELDS: list[FieldSpec] = [
     FieldSpec("health_inspection", "Health Inspection", Source.CMS_PROVIDER, "health_inspection_rating"),
     FieldSpec("staffing", "Staffing", Source.CMS_PROVIDER, "staffing_rating"),
     FieldSpec("quality_of_resident_care", "Quality of Resident Care", Source.CMS_PROVIDER, "qm_rating"),
-    # --- [bonus] 12 hospitalization / ED metrics ---
-    # Facility values come from the Claims QM dataset (long format, matched by measure description);
-    # *_national / *_state come from the State US Averages dataset (NATION row + the facility's state
-    # row). The exact slugs/columns are confirmed by scripts/verify.py before wiring normalize.py.
+    # --- [bonus] 12 hospitalization / ED metrics (see METRIC_SPECS for sourcing) ---
     FieldSpec("str_hospitalization", "Short Term Hospitalization", Source.CMS_CLAIMS, bonus=True),
     FieldSpec("str_hospitalization_national", "STR National Avg. for Hospitalization", Source.CMS_STATE_AVG, bonus=True),
     FieldSpec("str_hospitalization_state", "STR State National Avg. for Hospitalization", Source.CMS_STATE_AVG, bonus=True),
@@ -78,3 +75,37 @@ REQUIRED_PROVIDER_SLUGS: tuple[str, ...] = (
 FIELDS_BY_KEY: dict[str, FieldSpec] = {f.key: f for f in REPORT_FIELDS}
 MVP_FIELDS: list[FieldSpec] = [f for f in REPORT_FIELDS if not f.bonus]
 BONUS_FIELDS: list[FieldSpec] = [f for f in REPORT_FIELDS if f.bonus]
+
+
+@dataclass(frozen=True)
+class MetricSpec:
+    """How to source each of the four facility hospitalization/ED measures and the matching
+    State-US-Averages column. `avg_prefix` is the *stable* part of the averages column slug; the
+    PDC API appends a changing hash to long names, so we resolve by prefix, not exact slug."""
+    key: str                # base key (matches HospEDMetrics + its *_national / *_state fields)
+    claims_measure: str     # exact measure_description in the Claims QM dataset (ijh5-nb2v)
+    avg_prefix: str         # stable prefix of the matching State US Averages column (xcdc-v8bm)
+
+
+METRIC_SPECS: list[MetricSpec] = [
+    MetricSpec(
+        "str_hospitalization",
+        "Percentage of short-stay residents who were rehospitalized after a nursing home admission",
+        "percentage_of_short_stay_residents_who_were_rehospitalized",
+    ),
+    MetricSpec(
+        "str_ed_visit",
+        "Percentage of short-stay residents who had an outpatient emergency department visit",
+        "percentage_of_short_stay_residents_who_had_an_outpatient_em",
+    ),
+    MetricSpec(
+        "lt_hospitalization",
+        "Number of hospitalizations per 1000 long-stay resident days",
+        "number_of_hospitalizations_per_1000_longstay_resident_days",
+    ),
+    MetricSpec(
+        "lt_ed_visit",
+        "Number of outpatient emergency department visits per 1000 long-stay resident days",
+        "number_of_outpatient_emergency_department_visits_per_1000_l",
+    ),
+]
