@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import html
 
+import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
@@ -12,13 +13,27 @@ from medelite.export.pdf import build_pdf
 from medelite.export.docx import build_docx
 from medelite.models import ManualInputs
 from medelite.report import assemble_report
-from medelite.validation import validate_ccn
+from medelite.validation import parse_ccn_list, validate_ccn
 
 st.set_page_config(page_title="Facility Assessment Snapshot", page_icon="🏥", layout="centered")
 
 _SOURCE_ORDER = ["Facility", "U.S.", "State"]
 _SOURCE_COLORS = ["#E6007E", "#9AA0B4", "#1A73E8"]
 _RATING_LABELS = {"Overall Star Rating", "Health Inspection", "Staffing", "Quality of Resident Care"}
+
+# Rows shown in the side-by-side compare view (must match labels produced by presentation.all_rows).
+_COMPARE_LABELS = [
+    "Location",
+    "Census Capacity",
+    "Overall Star Rating",
+    "Health Inspection",
+    "Staffing",
+    "Quality of Resident Care",
+    "Short Term Hospitalization",
+    "STR ED Visit",
+    "LT Hospitalization",
+    "ED Visit",
+]
 
 _TABLE_CSS = """
 <style>
@@ -211,8 +226,21 @@ def render_qa(rep) -> None:
             st.markdown(f"- **{i.field}** — _{i.status.value}_: {i.message}")
 
 
-def main() -> None:
-    render_header()
+def _load_report(ccn: str, manual: ManualInputs):
+    """Fetch + assemble one facility. Raises CMSClientError only on the provider call."""
+    provider_raw = fetch_provider(ccn)
+    claims_rows: list = []
+    state_avg_rows: list = []
+    if provider_raw is not None:
+        try:
+            claims_rows = fetch_claims(ccn)
+            state_avg_rows = fetch_state_averages()
+        except CMSClientError:
+            pass
+    return assemble_report(ccn, provider_raw, manual, claims_rows, state_avg_rows)
+
+
+def render_single() -> None:
     ccn, manual = sidebar_inputs()
 
     if not ccn:
@@ -279,6 +307,96 @@ def main() -> None:
 
     render_benchmarks(rep)
     render_qa(rep)
+
+
+def _render_comparison(reports) -> None:
+    rowmaps = [(rep, dict(presentation.all_rows(rep))) for rep in reports]
+
+    st.markdown(f"#### Comparing {len(reports)} facilities")
+
+    columns = {}
+    for rep, rowmap in rowmaps:
+        header = f"{rep.facility_name} ({rep.ccn})"
+        columns[header] = [rowmap.get(label, "N/A") for label in _COMPARE_LABELS]
+    df = pd.DataFrame(columns, index=_COMPARE_LABELS)
+    st.dataframe(df, use_container_width=True)
+
+    names = []
+    overall = []
+    for rep, rowmap in rowmaps:
+        name = rep.facility_name
+        names.append(name if len(name) <= 24 else name[:23] + "…")
+        value = rowmap.get("Overall Star Rating", "")
+        overall.append(int(value) if value.isdigit() else None)
+
+    fig = go.Figure(
+        go.Bar(
+            x=names,
+            y=overall,
+            marker_color="#E6007E",
+            text=["" if o is None else str(o) for o in overall],
+            textposition="outside",
+            cliponaxis=False,
+        )
+    )
+    fig.update_layout(
+        height=320,
+        margin=dict(l=10, r=10, t=24, b=10),
+        yaxis_title="Overall star rating",
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        font=dict(size=12),
+    )
+    fig.update_yaxes(range=[0, 5], showgrid=True, gridcolor="rgba(0,0,0,0.06)", zeroline=False)
+    fig.update_xaxes(showgrid=False)
+    st.plotly_chart(fig, use_container_width=True)
+    st.caption("Pulled live from CMS. Higher star ratings are better; lower hospitalization/ED figures are better.")
+
+
+def render_compare() -> None:
+    st.sidebar.header("Compare facilities")
+    raw = st.sidebar.text_area(
+        "CCNs to compare",
+        placeholder="One per line or comma-separated:\n686123\n105007\n245001",
+        height=150,
+        help="Enter 2 or more CMS Certification Numbers.",
+    )
+    ccns = parse_ccn_list(raw)
+    if len(ccns) < 2:
+        st.info("Enter two or more CCNs in the sidebar to compare facilities side by side.")
+        return
+
+    max_facilities = 6
+    if len(ccns) > max_facilities:
+        st.info(f"Showing the first {max_facilities} of {len(ccns)} CCNs for readability.")
+        ccns = ccns[:max_facilities]
+
+    reports = []
+    for ccn in ccns:
+        error = validate_ccn(ccn)
+        if error:
+            st.warning(f"Skipping `{ccn}` — {error}")
+            continue
+        try:
+            reports.append(_load_report(ccn, ManualInputs()))
+        except CMSClientError:
+            st.warning(f"Skipping `{ccn}` — couldn't reach the CMS API.")
+
+    if not reports:
+        st.warning("No facilities could be loaded. Check the CCNs and try again.")
+        return
+
+    _render_comparison(reports)
+
+
+def main() -> None:
+    render_header()
+    mode = st.sidebar.radio("Mode", ["Single facility", "Compare facilities"], index=0)
+    st.sidebar.divider()
+    if mode == "Single facility":
+        render_single()
+    else:
+        render_compare()
 
 
 if __name__ == "__main__":

@@ -4,7 +4,7 @@
 
 **Turn a CMS Certification Number into a branded, export-ready facility snapshot — in seconds.**
 
-A lightweight micro-app that pulls live CMS nursing-home data for any facility, merges it with manual operational fields, and renders a polished **Facility Assessment Snapshot** with one-click **PDF** and **Word** export.
+A lightweight micro-app that pulls live CMS nursing-home data for any facility, merges it with manual operational fields, and renders a polished **Facility Assessment Snapshot** with one-click **PDF** and **Word** export — plus a side-by-side **compare mode** for evaluating several facilities at once.
 
 ![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
 ![Streamlit](https://img.shields.io/badge/Streamlit-FF4B4B?logo=streamlit&logoColor=white)
@@ -12,6 +12,7 @@ A lightweight micro-app that pulls live CMS nursing-home data for any facility, 
 ![Plotly](https://img.shields.io/badge/Plotly-3F4F75?logo=plotly&logoColor=white)
 ![Poetry](https://img.shields.io/badge/Poetry-60A5FA?logo=poetry&logoColor=white)
 ![Tested](https://img.shields.io/badge/tested-pytest%20%2B%20Hypothesis-2ea44f?logo=pytest&logoColor=white)
+[![CI](https://github.com/<your-username>/medelite-facility-report/actions/workflows/ci.yml/badge.svg)](https://github.com/<your-username>/medelite-facility-report/actions/workflows/ci.yml)
 
 </div>
 
@@ -27,6 +28,8 @@ Care organizations evaluating a nursing facility need a fast, trustworthy one-pa
 
 The design priority is **data quality**: every value from CMS is validated and coerced through a QA layer that decodes official footnotes, flags schema drift, and clearly marks anything missing as `N/A` with the reason — never a silent blank or a wrong number.
 
+The app runs in **two modes**: a detailed single-facility snapshot, and a **compare** mode that places several facilities side by side for partnership decisions.
+
 ---
 
 ## Features
@@ -41,10 +44,11 @@ The design priority is **data quality**: every value from CMS is validated and c
 **Bonus**
 - 📊 **12 hospitalization & ED metrics** — short-stay rehospitalization/ED and long-stay hospitalization/ED, each compared against **national and state** benchmarks (pulled from two additional CMS datasets).
 - 📈 **Interactive Plotly charts** + delta data-cards (facility vs U.S. average, color-coded so *lower = better*).
+- 🆚 **Compare mode** — paste multiple CCNs and see facilities side by side (ratings, beds, hospitalization/ED) in a comparison table plus an overall-rating chart.
 - 📃 **Word (.docx) export** mirroring the snapshot, with a real clickable hyperlink.
 - ⭐ **Star-rating glyphs** and a sectioned table separating the profile block from the metrics block.
 - ✅ **CCN format validation** and friendly error states for not-found / API-down cases.
-- 🧪 **~37 tests** including **Hypothesis** property-based tests that caught a real edge-case bug.
+- 🧪 **~39 tests** including **Hypothesis** property-based tests that caught a real edge-case bug, run in **CI** on every push.
 
 ---
 
@@ -136,12 +140,13 @@ medelite-facility-report/
 │  ├─ qa.py                    # validated coercion, footnotes, schema guard
 │  ├─ report.py                # assemble_report() / build_report()
 │  ├─ presentation.py          # row + value formatting (shared by all renderers)
-│  ├─ validation.py            # CCN input validation
+│  ├─ validation.py            # CCN validation + multi-CCN parsing
 │  └─ export/
 │     ├─ pdf.py                # reportlab PDF renderer
 │     └─ docx.py               # python-docx Word renderer
-├─ tests/                      # ~37 tests (pytest + Hypothesis)
+├─ tests/                      # ~39 tests (pytest + Hypothesis)
 ├─ scripts/verify.py           # live CMS dataset/slug verifier
+├─ .github/workflows/ci.yml    # CI: ruff + pytest on every push
 ├─ .streamlit/config.toml      # theme (magenta primary)
 ├─ pyproject.toml              # Poetry config + dependencies
 ├─ poetry.lock
@@ -161,20 +166,22 @@ poetry install
 poetry run streamlit run streamlit_app.py
 ```
 
-Open the local URL Streamlit prints, then enter a CCN in the sidebar — try **`686123`** (Kendall Lakes Healthcare and Rehab Center, Miami FL).
+Open the local URL Streamlit prints, then enter a CCN in the sidebar — try **`686123`** (Kendall Lakes Healthcare and Rehab Center, Miami FL). Switch to **Compare facilities** in the sidebar to paste several CCNs at once.
 
 > Need more facilities to test? `scripts/verify.py` (and the `find_test_ccns.py` helper) list real CCNs straight from the CMS dataset, filterable by state and rating.
 
 ---
 
-## Testing
+## Testing & CI
 
 ```bash
-poetry run pytest -q       # ~37 tests, including property-based tests
+poetry run pytest -q       # ~39 tests, including property-based tests
 poetry run ruff check .    # lint
 ```
 
-The suite covers value coercion and footnote handling, slug prefix-resolution, metric mapping, the not-found path, and the PDF/Word byte output. **Hypothesis** property tests fuzz the coercion layer — one of them surfaced an `OverflowError` from `int(float("inf"))`, now fixed with a finite-value guard and locked by a regression test.
+The suite covers value coercion and footnote handling, slug prefix-resolution, metric mapping, CCN validation/parsing, the not-found path, and the PDF/Word byte output. **Hypothesis** property tests fuzz the coercion layer — one of them surfaced an `OverflowError` from `int(float("inf"))`, now fixed with a finite-value guard and locked by a regression test.
+
+A **GitHub Actions** workflow (`.github/workflows/ci.yml`) installs the project with Poetry and runs `ruff` + the full `pytest` suite on every push and pull request. (Ruff is non-blocking initially; flip `continue-on-error` off once `ruff check .` is clean locally to make lint gate the build too.)
 
 ---
 
@@ -206,7 +213,7 @@ The suite covers value coercion and footnote handling, slug prefix-resolution, m
 
 ## Tech stack
 
-`Python 3.11` · `Streamlit` · `Pydantic v2` · `requests` · `pandas` · `Plotly` · `reportlab` (PDF) · `python-docx` (Word) · `pytest` + `Hypothesis` · `ruff` · `Poetry`
+`Python 3.11` · `Streamlit` · `Pydantic v2` · `requests` · `pandas` · `Plotly` · `reportlab` (PDF) · `python-docx` (Word) · `pytest` + `Hypothesis` · `ruff` · `Poetry` · `GitHub Actions`
 
 ---
 

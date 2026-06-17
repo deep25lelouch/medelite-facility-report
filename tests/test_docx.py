@@ -1,6 +1,5 @@
 from medelite import report
 from medelite.export.docx import build_docx
-from medelite.models import ManualInputs
 
 
 def test_build_docx_returns_docx_bytes(kendall_raw, full_manual, kendall_claims, state_averages_rows):
