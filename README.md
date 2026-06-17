@@ -4,7 +4,7 @@
 
 **Turn a CMS Certification Number into a branded, export-ready facility snapshot — in seconds.**
 
-A lightweight micro-app that pulls live CMS nursing-home data for any facility, merges it with manual operational fields, and renders a polished **Facility Assessment Snapshot** with one-click **PDF** and **Word** export — plus a side-by-side **compare mode** for evaluating several facilities at once.
+A lightweight micro-app that pulls live CMS nursing-home data for any facility, merges it with manual operational fields, and renders a polished **Facility Assessment Snapshot** with one-click **PDF** and **Word** export, plus a side-by-side **compare mode** for evaluating several facilities at once.
 
 ### ▶ Live app: **https://medelite-facility-report.streamlit.app**
 
@@ -29,7 +29,7 @@ A lightweight micro-app that pulls live CMS nursing-home data for any facility, 
 
 Care organizations evaluating a nursing facility need a fast, trustworthy one-page profile that blends **public CMS quality data** with their own **operational notes**. This app does exactly that: enter a 6-digit **CMS Certification Number (CCN)**, and it fetches the facility's official ratings, bed count, location, and hospitalization/ED measures directly from the CMS Provider Data Catalog, layers in manually entered fields (EMR, census, coverage, etc.), and produces a branded snapshot you can read on screen or download as a PDF or Word document.
 
-The design priority is **data quality**: every value from CMS is validated and coerced through a QA layer that decodes official footnotes, flags schema drift, and clearly marks anything missing as `N/A` with the reason — never a silent blank or a wrong number.
+The design priority is **data quality**: every value from CMS is validated and coerced through a QA layer that decodes official footnotes, flags schema drift, and clearly marks anything missing as `N/A` with the reason that never a silent blank or a wrong number.
 
 The app runs in **two modes**: a detailed single-facility snapshot, and a **compare** mode that places several facilities side by side for partnership decisions.
 
@@ -57,7 +57,7 @@ The app runs in **two modes**: a detailed single-facility snapshot, and a **comp
 
 ## Architecture
 
-A deliberately thin Streamlit UI sits on top of a **framework-agnostic core** (`medelite/`) that contains **zero Streamlit imports** — so the same logic is unit-testable and could be lifted behind a REST API unchanged. A single declarative field registry (`mapping.py`) is the source of truth for the layout, and one `ReportModel` feeds **three renderers** (on-screen table, PDF, Word).
+A deliberately thin Streamlit UI sits on top of a **framework-agnostic core** (`medelite/`) that contains **zero Streamlit imports**, so the same logic is unit-testable and could be lifted behind a REST API unchanged. A single declarative field registry (`mapping.py`) is the source of truth for the layout, and one `ReportModel` feeds **three renderers** (on-screen table, PDF, Word).
 
 ```mermaid
 flowchart TD
@@ -184,7 +184,7 @@ poetry run pytest -q       # ~39 tests, including property-based tests
 poetry run ruff check .    # lint
 ```
 
-The suite covers value coercion and footnote handling, slug prefix-resolution, metric mapping, CCN validation/parsing, the not-found path, and the PDF/Word byte output. **Hypothesis** property tests fuzz the coercion layer — one of them surfaced an `OverflowError` from `int(float("inf"))`, now fixed with a finite-value guard and locked by a regression test.
+The suite covers value coercion and footnote handling, slug prefix-resolution, metric mapping, CCN validation/parsing, the not-found path, and the PDF/Word byte output. **Hypothesis** property tests fuzz the coercion layer, one of them surfaced an `OverflowError` from `int(float("inf"))`, now fixed with a finite-value guard and locked by a regression test.
 
 A **GitHub Actions** workflow (`.github/workflows/ci.yml`) installs the project with Poetry and runs `ruff` + the full `pytest` suite on every push and pull request. (Ruff is non-blocking initially; flip `continue-on-error` off once `ruff check .` is clean locally to make lint gate the build too.)
 
@@ -196,13 +196,13 @@ Deployed from this repo's `main` branch with `streamlit_app.py` as the entry poi
 
 > ⏰ The free tier **sleeps** after inactivity — open the live URL a minute before a demo so it's warm.
 
-**Scale path (if Medelite evaluated many facilities at once):** schedule a monthly **Airflow** job to snapshot the CMS datasets into **Postgres/Snowflake**, and point the app at the warehouse instead of the live API — caching benchmarks and enabling cross-facility comparison. Intentionally *not* built here, since the brief is a single-facility report generator and added infrastructure would over-scope it.
+**Scale path (if Medelite evaluated many facilities at once):** schedule a monthly **Airflow** job to snapshot the CMS datasets into **Postgres/Snowflake**, and point the app at the warehouse instead of the live API, caching benchmarks and enabling cross-facility comparison. Intentionally *not* built here, since the brief is a single-facility report generator and added infrastructure would over-scope it.
 
 ---
 
 ## Design decisions & tradeoffs
 
-**Lightweight by intent.** Streamlit + a small typed core, no database, no API gateway. The brief is a 4–6 hour report micro-app, so the value is in clean data handling and a faithful layout — not infrastructure. Server-side fetching sidesteps CORS, and `pandas`/`pydantic` give a strong validation story.
+**Lightweight by intent.** Streamlit + a small typed core, no database, no API gateway. The brief is a 4–6 hour report micro-app, so the value is in clean data handling and a faithful layout, not infrastructure. Server-side fetching sidesteps CORS, and `pandas`/`pydantic` give a strong validation story.
 
 **Override logic.** Facility name resolves as **override → CMS legal name → "Unknown Facility"**. Manual operational fields are merged on top of CMS-derived values. The `INFINITE` brand banner is a **fixed constant**, never derived from the facility name.
 
