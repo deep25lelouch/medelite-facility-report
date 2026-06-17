@@ -43,6 +43,10 @@ def build_pdf(rep: ReportModel) -> bytes:
         "rep_title", parent=ss["Normal"], alignment=TA_CENTER,
         fontName="Helvetica-Bold", fontSize=12, textColor=_INK, spaceAfter=12,
     )
+    state_style = ParagraphStyle(
+        "state_style", parent=ss["Normal"], alignment=TA_CENTER,
+        fontName="Helvetica-Bold", fontSize=11, textColor=colors.HexColor(config.BRAND_COLOR), spaceAfter=12,
+    )
     facility = ParagraphStyle("facility", parent=ss["Heading2"], fontSize=13, textColor=_INK, spaceBefore=2, spaceAfter=8)
     cell = ParagraphStyle("cell", parent=ss["Normal"], fontSize=9, leading=12)
     label = ParagraphStyle("label", parent=cell, fontName="Helvetica-Bold")
@@ -56,8 +60,10 @@ def build_pdf(rep: ReportModel) -> bytes:
             brand,
         ),
         Paragraph(escape(config.REPORT_TITLE), rep_title),
-        Paragraph(escape(rep.facility_name), facility),
     ]
+    if rep.state:
+        story.append(Paragraph(escape(rep.state.upper()), state_style))
+    story.append(Paragraph(escape(rep.facility_name), facility))
 
     data = [
         [Paragraph(escape(lbl), label), Paragraph(escape(val), cell)]

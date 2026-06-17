@@ -72,6 +72,14 @@ def build_docx(rep: ReportModel) -> bytes:
     title_run.bold = True
     title_run.font.size = Pt(12)
 
+    if rep.state:
+        state_p = doc.add_paragraph()
+        state_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        state_run = state_p.add_run(rep.state.upper())
+        state_run.bold = True
+        state_run.font.size = Pt(11)
+        state_run.font.color.rgb = _BRAND_RGB
+
     name = doc.add_paragraph()
     name_run = name.add_run(rep.facility_name)
     name_run.bold = True

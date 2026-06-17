@@ -291,6 +291,12 @@ def render_single() -> None:
             "Medicare Care Compare — or, if it's correct, the snapshot below uses your manual inputs."
         )
 
+    if rep.state:
+        st.markdown(
+            f"<div style='text-align:center; font-weight:700; letter-spacing:2px; "
+            f"color:{config.BRAND_COLOR}; margin:0 0 0.6rem;'>{html.escape(rep.state.upper())}</div>",
+            unsafe_allow_html=True,
+        )
     st.markdown(f"#### {html.escape(rep.facility_name)}")
     render_report_table(presentation.mvp_rows(rep), presentation.metric_rows(rep))
 
